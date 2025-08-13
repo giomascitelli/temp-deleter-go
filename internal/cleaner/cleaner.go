@@ -209,6 +209,7 @@ func (c *Cleaner) shouldDelete(path string, info os.FileInfo) bool {
 
 	// Basic file-in-use check for files
 	if !info.IsDir() {
+		// #nosec G304 -- Path comes from filepath.Walk, already validated by Go's filesystem walker
 		if file, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
 			// Handle close error (gosec G104)
 			if closeErr := file.Close(); closeErr != nil {

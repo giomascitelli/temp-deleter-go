@@ -29,6 +29,7 @@ func New(filename string) *Logger {
 	}
 
 	// Use restrictive permissions for log file (gosec G302)
+	// #nosec G304 -- Filename is validated above to prevent path traversal
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		// Fallback to stdout if file creation fails
