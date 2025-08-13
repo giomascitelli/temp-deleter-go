@@ -10,10 +10,15 @@ A fast and efficient temporary file cleaner written in Go. Safely removes tempor
 ## VirusTotal Scan Results
 
 `temp-deleter-windows-amd64.exe`: https://www.virustotal.com/gui/file/d4ecfa978bbcad40ce598d8fb13f2c97f99e3275c5ef7560b862c5f2ff7cf442/details
+
 `temp-deleter-windows-arm64.exe`: https://www.virustotal.com/gui/file/6f8b69e7d11ffdf2e40097d1bc5e0e90ba77cad8ccf72640946193f3f2d6b97e/detection
+
 `temp-deleter-linux-amd64`: https://www.virustotal.com/gui/file/9b0cd21840b41cec0fc380d01e55ef949660bd2ed2dfe5b6015df2e49fb90eaa?nocache=1
+
 `temp-deleter-linux-arm64`: https://www.virustotal.com/gui/file/aba0376e59d937f653622f92535e99e027174dd9713ccc52d4437d2637de8e66/detection
+
 `temp-deleter-darwin-amd64`: https://www.virustotal.com/gui/file/893539aa9795c5ca44a06fcd127062e557f35963a481408b7cc38cb248ccd7aa/detection
+
 `temp-deleter-darwin-arm64`: https://www.virustotal.com/gui/file/5456404a036cb7159e1fd007117b4e328e5e059b155e0b19c0e9fc22a11b0879?nocache=1
 
 ## Supported Directories
