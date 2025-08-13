@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Get the version
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Build binaries
+      run: |
+        mkdir -p dist
+        
+        # Get version and build info for embedding
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        GIT_COMMIT=$(git rev-parse --short HEAD)
+        
+        # Enhanced ldflags for better binary characteristics and reduced false positives
+        LDFLAGS="-s -w -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT}"
+        
+        # Build for Linux AMD64
+        GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -trimpath -o dist/temp-deleter-linux-amd64 ./cmd/temp-deleter
+        
+        # Build for Linux ARM64
+        GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -trimpath -o dist/temp-deleter-linux-arm64 ./cmd/temp-deleter
+        
+        # Build for Windows AMD64
+        GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -trimpath -o dist/temp-deleter-windows-amd64.exe ./cmd/temp-deleter
+        
+        # Build for Windows ARM64
+        GOOS=windows GOARCH=arm64 go build -ldflags="${LDFLAGS}" -trimpath -o dist/temp-deleter-windows-arm64.exe ./cmd/temp-deleter
+        
+        # Build for macOS AMD64
+        GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -trimpath -o dist/temp-deleter-darwin-amd64 ./cmd/temp-deleter
+        
+        # Build for macOS ARM64 (Apple Silicon)
+        GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -trimpath -o dist/temp-deleter-darwin-arm64 ./cmd/temp-deleter
+
+    - name: Create checksums
+      run: |
+        cd dist
+        sha256sum * > checksums.txt
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Get the previous tag
+        PREV_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+        
+        if [ -z "$PREV_TAG" ]; then
+          CHANGELOG="Initial release"
+        else
+          CHANGELOG=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD)
+        fi
+        
+        echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: Release ${{ steps.get_version.outputs.VERSION }}
+        body: |
+          ## What's Changed
+          ${{ steps.changelog.outputs.CHANGELOG }}
+          
+          ## Download
+          Choose the appropriate binary for your system:
+          - **Linux (x64)**: `temp-deleter-linux-amd64`
+          - **Linux (ARM64)**: `temp-deleter-linux-arm64`
+          - **Windows (x64)**: `temp-deleter-windows-amd64.exe`
+          - **Windows (ARM64)**: `temp-deleter-windows-arm64.exe`
+          - **macOS (Intel)**: `temp-deleter-darwin-amd64`
+          - **macOS (Apple Silicon)**: `temp-deleter-darwin-arm64`
+          
+          ## 🛡️ Security Notice
+          **Windows/Chrome may show security warnings** for this file cleanup utility. This is normal for new releases.
+          
+          **To use safely:**
+          1. **Verify checksums** using the `checksums.txt` file
+          2. **Windows**: Click "More info" → "Run anyway" in Windows Defender
+          3. **Chrome**: Click "Keep" when prompted about unsafe downloads
+          4. **First run**: Windows may ask for administrator permission (needed for temp file access)
+          
+          **Why this happens:**
+          - New releases haven't built download reputation yet
+          - File deletion tools trigger antivirus heuristics
+          - Binary isn't code-signed (requires expensive certificate)
+          
+          **This software is safe:** Built automatically from open source code, checksums provided for verification.
+          
+          ## Installation
+          1. Download the appropriate binary for your system
+          2. **Windows**: Right-click → "Run as administrator" (first time only)
+          3. **Linux/macOS**: Make executable: `chmod +x temp-deleter-*`
+          4. Run: `./temp-deleter-*` or `temp-deleter-*.exe`
+          
+          ## Verification
+          **Verify download integrity:**
+          ```bash
+          # On Windows (PowerShell)
+          Get-FileHash temp-deleter-windows-amd64.exe -Algorithm SHA256
+          
+          # On Linux/macOS
+          sha256sum temp-deleter-linux-amd64
+          ```
+          Compare with values in `checksums.txt`
+        files: |
+          dist/*
+        draft: false
+        prerelease: false
