@@ -210,7 +210,10 @@ func (c *Cleaner) shouldDelete(path string, info os.FileInfo) bool {
 	// Basic file-in-use check for files
 	if !info.IsDir() {
 		if file, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
-			file.Close()
+			// Handle close error (gosec G104)
+			if closeErr := file.Close(); closeErr != nil {
+				return false // Consider file in-use if we can't close it
+			}
 		} else {
 			// If we can't open for writing, it might be in use
 			return false

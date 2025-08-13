@@ -5,6 +5,7 @@ package logger
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -20,7 +21,15 @@ type Logger struct {
 func New(filename string) *Logger {
 	log := logrus.New()
 
-	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	// Validate filename to prevent path traversal (gosec G304)
+	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
+		log.SetOutput(os.Stdout)
+		log.Errorf("Invalid log filename: %s", filename)
+		return &Logger{Logger: log, file: nil}
+	}
+
+	// Use restrictive permissions for log file (gosec G302)
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		// Fallback to stdout if file creation fails
 		log.SetOutput(os.Stdout)
@@ -48,7 +57,10 @@ func New(filename string) *Logger {
 func (l *Logger) Close() {
 	if l.file != nil {
 		l.Info("Temp Deleter session ended")
-		l.file.Close()
+		// Handle close error (gosec G104)
+		if err := l.file.Close(); err != nil {
+			l.Errorf("Failed to close log file: %v", err)
+		}
 	}
 }
 
