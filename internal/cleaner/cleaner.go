@@ -1,3 +1,5 @@
+// Package cleaner provides concurrent file and directory cleaning operations.
+// It implements safe deletion with protection mechanisms and detailed result tracking.
 package cleaner
 
 import (
@@ -44,7 +46,7 @@ type Cleaner struct {
 	dryRun     bool
 }
 
-// New creates a new cleaner instance
+// New creates a new cleaner instance with optimal worker count based on CPU cores
 func New(logger Logger, dryRun bool) *Cleaner {
 	maxWorkers := runtime.NumCPU()
 	if maxWorkers < 2 {
@@ -61,7 +63,7 @@ func New(logger Logger, dryRun bool) *Cleaner {
 	}
 }
 
-// CleanDirectories cleans multiple directories concurrently
+// CleanDirectories cleans multiple directories concurrently using worker pool pattern
 func (c *Cleaner) CleanDirectories(directories []string) *CleanupResult {
 	startTime := time.Now()
 	result := &CleanupResult{}
@@ -69,13 +71,9 @@ func (c *Cleaner) CleanDirectories(directories []string) *CleanupResult {
 	c.logger.Infof("Starting cleanup of %d directories (workers: %d, dry-run: %v)",
 		len(directories), c.maxWorkers, c.dryRun)
 
-	// Channel for work items
 	workChan := make(chan string, len(directories))
-
-	// Channel for results
 	resultChan := make(chan *CleanupResult, len(directories))
 
-	// Start workers
 	var wg sync.WaitGroup
 	for i := 0; i < c.maxWorkers; i++ {
 		wg.Add(1)
@@ -88,19 +86,16 @@ func (c *Cleaner) CleanDirectories(directories []string) *CleanupResult {
 		}()
 	}
 
-	// Send work to workers
 	for _, dir := range directories {
 		workChan <- dir
 	}
 	close(workChan)
 
-	// Wait for workers to complete
 	go func() {
 		wg.Wait()
 		close(resultChan)
 	}()
 
-	// Collect results
 	for dirResult := range resultChan {
 		c.mergeResults(result, dirResult)
 	}
@@ -111,11 +106,9 @@ func (c *Cleaner) CleanDirectories(directories []string) *CleanupResult {
 	return result
 }
 
-// cleanDirectory cleans a single directory
 func (c *Cleaner) cleanDirectory(dirPath string) *CleanupResult {
 	result := &CleanupResult{}
 
-	// Check if directory exists
 	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
 		c.logger.LogSkipped(dirPath, "directory does not exist")
 		atomic.AddInt64(&result.SkippedDirs, 1)
@@ -142,7 +135,6 @@ func (c *Cleaner) cleanDirectory(dirPath string) *CleanupResult {
 			return nil
 		}
 
-		// Count total items
 		if info.IsDir() {
 			atomic.AddInt64(&result.TotalDirs, 1)
 		} else {
@@ -150,7 +142,6 @@ func (c *Cleaner) cleanDirectory(dirPath string) *CleanupResult {
 			atomic.AddInt64(&result.TotalSize, info.Size())
 		}
 
-		// Try to delete the item
 		if c.shouldDelete(path, info) {
 			if c.dryRun {
 				c.logger.Infof("DRY RUN: Would delete %s", path)
@@ -201,23 +192,22 @@ func (c *Cleaner) cleanDirectory(dirPath string) *CleanupResult {
 	return result
 }
 
-// shouldDelete determines if an item should be deleted
+// shouldDelete determines if an item should be deleted based on safety rules
 func (c *Cleaner) shouldDelete(path string, info os.FileInfo) bool {
 	// Skip hidden files and directories on Unix-like systems
 	if runtime.GOOS != "windows" && filepath.Base(path)[0] == '.' {
 		return false
 	}
 
-	// Skip system files on Windows
+	// Skip critical Windows system files
 	if runtime.GOOS == "windows" {
-		// Skip some critical Windows temp files
 		name := filepath.Base(path)
 		if name == "desktop.ini" || name == "thumbs.db" || name == "Thumbs.db" {
 			return false
 		}
 	}
 
-	// Skip files that are currently being used (basic check)
+	// Basic file-in-use check for files
 	if !info.IsDir() {
 		if file, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
 			file.Close()
@@ -230,7 +220,6 @@ func (c *Cleaner) shouldDelete(path string, info os.FileInfo) bool {
 	return true
 }
 
-// deleteItem deletes a single file or directory
 func (c *Cleaner) deleteItem(path string, info os.FileInfo) error {
 	if info.IsDir() {
 		return os.RemoveAll(path)
@@ -238,7 +227,7 @@ func (c *Cleaner) deleteItem(path string, info os.FileInfo) error {
 	return os.Remove(path)
 }
 
-// mergeResults merges two cleanup results
+// mergeResults combines results from multiple worker goroutines
 func (c *Cleaner) mergeResults(target, source *CleanupResult) {
 	atomic.AddInt64(&target.TotalFiles, source.TotalFiles)
 	atomic.AddInt64(&target.TotalDirs, source.TotalDirs)
@@ -251,7 +240,7 @@ func (c *Cleaner) mergeResults(target, source *CleanupResult) {
 	atomic.AddInt64(&target.SkippedFiles, source.SkippedFiles)
 	atomic.AddInt64(&target.SkippedDirs, source.SkippedDirs)
 
-	// Merge error messages (note: not thread-safe, but used after workers complete)
+	// Note: not thread-safe, but called after workers complete
 	target.ErrorMessages = append(target.ErrorMessages, source.ErrorMessages...)
 }
 

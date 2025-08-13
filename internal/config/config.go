@@ -1,3 +1,5 @@
+// Package config provides cross-platform configuration management for temp-deleter.
+// It handles OS detection and provides platform-specific temporary directory lists.
 package config
 
 import (
@@ -13,7 +15,7 @@ type Config struct {
 	AzureSASURL string
 }
 
-// New creates a new configuration instance
+// New creates a new configuration instance with platform-specific defaults
 func New() *Config {
 	return &Config{
 		OS:          runtime.GOOS,
@@ -36,7 +38,6 @@ func (c *Config) GetTempDirectories() []string {
 	}
 }
 
-// getWindowsTempDirs returns Windows temporary directories
 func (c *Config) getWindowsTempDirs() []string {
 	userProfile := os.Getenv("USERPROFILE")
 	if userProfile == "" {
@@ -59,7 +60,6 @@ func (c *Config) getWindowsTempDirs() []string {
 	return dirs
 }
 
-// getLinuxTempDirs returns Linux temporary directories
 func (c *Config) getLinuxTempDirs() []string {
 	homeDir := os.Getenv("HOME")
 
@@ -81,7 +81,6 @@ func (c *Config) getLinuxTempDirs() []string {
 	return dirs
 }
 
-// getMacOSTempDirs returns macOS temporary directories
 func (c *Config) getMacOSTempDirs() []string {
 	homeDir := os.Getenv("HOME")
 
