@@ -1,3 +1,5 @@
+// Package storage provides cloud storage abstraction for log file uploads.
+// This simplified version provides interface compatibility without Azure dependencies.
 package storage
 
 import (
@@ -20,7 +22,7 @@ type Logger interface {
 	Warnf(format string, args ...interface{})
 }
 
-// New creates a new storage instance
+// New creates a new storage instance with optional cloud storage support
 func New(sasURL string, logger Logger) *Storage {
 	if sasURL == "" {
 		logger.Infof("No SAS URL provided, cloud logging disabled")
@@ -39,7 +41,7 @@ func (s *Storage) IsEnabled() bool {
 	return s.enabled
 }
 
-// UploadLogFile would upload a log file to cloud storage
+// UploadLogFile uploads a log file to cloud storage (placeholder implementation)
 func (s *Storage) UploadLogFile(logFilePath string) error {
 	if !s.enabled {
 		s.logger.Warnf("Cloud storage not enabled, log file saved locally: %s", logFilePath)
@@ -49,7 +51,7 @@ func (s *Storage) UploadLogFile(logFilePath string) error {
 	return fmt.Errorf("cloud storage not implemented in this version")
 }
 
-// GenerateBlobName generates a unique name for a log file
+// GenerateBlobName generates a unique timestamped name for log files
 func (s *Storage) GenerateBlobName(baseName string) string {
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
 	hostname, _ := os.Hostname()
@@ -57,7 +59,6 @@ func (s *Storage) GenerateBlobName(baseName string) string {
 		hostname = "unknown"
 	}
 
-	// Clean the base name
 	baseName = filepath.Base(baseName)
 	if baseName == "" {
 		baseName = "temp-deleter"
@@ -66,7 +67,7 @@ func (s *Storage) GenerateBlobName(baseName string) string {
 	return fmt.Sprintf("%s_%s_%s.log", hostname, baseName, timestamp)
 }
 
-// TestConnection tests the connection (simplified version)
+// TestConnection tests cloud storage connectivity (placeholder implementation)
 func (s *Storage) TestConnection() error {
 	if !s.enabled {
 		s.logger.Infof("Cloud storage connection test skipped (not enabled)")
