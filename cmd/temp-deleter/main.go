@@ -43,7 +43,7 @@ func main() {
 	response := scanner.Text()
 
 	if response != "y" && response != "Y" && response != "yes" && response != "Yes" {
-		fmt.Println("Operation cancelled.")
+		fmt.Println("Operation canceled.")
 		return
 	}
 

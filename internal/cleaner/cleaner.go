@@ -119,15 +119,7 @@ func (c *Cleaner) cleanDirectory(dirPath string) *CleanupResult {
 
 	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			c.logger.LogError(path, err)
-			if info != nil && info.IsDir() {
-				atomic.AddInt64(&result.FailedDirs, 1)
-			} else {
-				atomic.AddInt64(&result.FailedFiles, 1)
-			}
-			result.ErrorMessages = append(result.ErrorMessages,
-				fmt.Sprintf("Walk error for %s: %v", path, err))
-			return filepath.SkipDir
+			return c.handleWalkError(path, info, err, result)
 		}
 
 		// Skip the root directory itself
@@ -135,49 +127,12 @@ func (c *Cleaner) cleanDirectory(dirPath string) *CleanupResult {
 			return nil
 		}
 
-		if info.IsDir() {
-			atomic.AddInt64(&result.TotalDirs, 1)
-		} else {
-			atomic.AddInt64(&result.TotalFiles, 1)
-			atomic.AddInt64(&result.TotalSize, info.Size())
-		}
+		c.updateTotalCounts(info, result)
 
 		if c.shouldDelete(path, info) {
-			if c.dryRun {
-				c.logger.Infof("DRY RUN: Would delete %s", path)
-				if info.IsDir() {
-					atomic.AddInt64(&result.DeletedDirs, 1)
-				} else {
-					atomic.AddInt64(&result.DeletedFiles, 1)
-					atomic.AddInt64(&result.DeletedSize, info.Size())
-				}
-			} else {
-				if err := c.deleteItem(path, info); err != nil {
-					c.logger.LogError(path, err)
-					if info.IsDir() {
-						atomic.AddInt64(&result.FailedDirs, 1)
-					} else {
-						atomic.AddInt64(&result.FailedFiles, 1)
-					}
-					result.ErrorMessages = append(result.ErrorMessages,
-						fmt.Sprintf("Delete error for %s: %v", path, err))
-				} else {
-					c.logger.LogDeletion(path, info.Size(), info.IsDir())
-					if info.IsDir() {
-						atomic.AddInt64(&result.DeletedDirs, 1)
-					} else {
-						atomic.AddInt64(&result.DeletedFiles, 1)
-						atomic.AddInt64(&result.DeletedSize, info.Size())
-					}
-				}
-			}
+			c.handleDeletion(path, info, result)
 		} else {
-			c.logger.LogSkipped(path, "protected or system file")
-			if info.IsDir() {
-				atomic.AddInt64(&result.SkippedDirs, 1)
-			} else {
-				atomic.AddInt64(&result.SkippedFiles, 1)
-			}
+			c.handleSkip(path, info, result)
 		}
 
 		return nil
@@ -190,6 +145,81 @@ func (c *Cleaner) cleanDirectory(dirPath string) *CleanupResult {
 	}
 
 	return result
+}
+
+// handleWalkError handles errors encountered during directory walking
+func (c *Cleaner) handleWalkError(path string, info os.FileInfo, err error, result *CleanupResult) error {
+	c.logger.LogError(path, err)
+	if info != nil && info.IsDir() {
+		atomic.AddInt64(&result.FailedDirs, 1)
+	} else {
+		atomic.AddInt64(&result.FailedFiles, 1)
+	}
+	result.ErrorMessages = append(result.ErrorMessages,
+		fmt.Sprintf("Walk error for %s: %v", path, err))
+	return filepath.SkipDir
+}
+
+// updateTotalCounts updates the total file and directory counts
+func (c *Cleaner) updateTotalCounts(info os.FileInfo, result *CleanupResult) {
+	if info.IsDir() {
+		atomic.AddInt64(&result.TotalDirs, 1)
+	} else {
+		atomic.AddInt64(&result.TotalFiles, 1)
+		atomic.AddInt64(&result.TotalSize, info.Size())
+	}
+}
+
+// handleDeletion handles the deletion process for files and directories
+func (c *Cleaner) handleDeletion(path string, info os.FileInfo, result *CleanupResult) {
+	if c.dryRun {
+		c.handleDryRunDeletion(path, info, result)
+	} else {
+		c.handleActualDeletion(path, info, result)
+	}
+}
+
+// handleDryRunDeletion handles dry run deletion simulation
+func (c *Cleaner) handleDryRunDeletion(path string, info os.FileInfo, result *CleanupResult) {
+	c.logger.Infof("DRY RUN: Would delete %s", path)
+	if info.IsDir() {
+		atomic.AddInt64(&result.DeletedDirs, 1)
+	} else {
+		atomic.AddInt64(&result.DeletedFiles, 1)
+		atomic.AddInt64(&result.DeletedSize, info.Size())
+	}
+}
+
+// handleActualDeletion handles the actual deletion of files and directories
+func (c *Cleaner) handleActualDeletion(path string, info os.FileInfo, result *CleanupResult) {
+	if err := c.deleteItem(path, info); err != nil {
+		c.logger.LogError(path, err)
+		if info.IsDir() {
+			atomic.AddInt64(&result.FailedDirs, 1)
+		} else {
+			atomic.AddInt64(&result.FailedFiles, 1)
+		}
+		result.ErrorMessages = append(result.ErrorMessages,
+			fmt.Sprintf("Delete error for %s: %v", path, err))
+	} else {
+		c.logger.LogDeletion(path, info.Size(), info.IsDir())
+		if info.IsDir() {
+			atomic.AddInt64(&result.DeletedDirs, 1)
+		} else {
+			atomic.AddInt64(&result.DeletedFiles, 1)
+			atomic.AddInt64(&result.DeletedSize, info.Size())
+		}
+	}
+}
+
+// handleSkip handles skipping of protected or system files
+func (c *Cleaner) handleSkip(path string, info os.FileInfo, result *CleanupResult) {
+	c.logger.LogSkipped(path, "protected or system file")
+	if info.IsDir() {
+		atomic.AddInt64(&result.SkippedDirs, 1)
+	} else {
+		atomic.AddInt64(&result.SkippedFiles, 1)
+	}
 }
 
 // shouldDelete determines if an item should be deleted based on safety rules
